@@ -1,0 +1,302 @@
+[
+  {
+    "id": "termination-01",
+    "category": "Termination",
+    "title": "Termination for convenience",
+    "standard_text": "Either party may end this agreement for convenience by giving thirty days' prior written notice. Work already performed remains payable. Neither party owes a termination penalty solely because it used this notice right.",
+    "red_flags": [
+      "Only one party may terminate for convenience.",
+      "Ending the agreement for convenience triggers a penalty or the payment of all remaining fees."
+    ]
+  },
+  {
+    "id": "termination-02",
+    "category": "Termination",
+    "title": "Termination for material breach",
+    "standard_text": "Either party may end this agreement if the other party does not cure a material breach within fifteen days after receiving written notice that describes the breach.",
+    "red_flags": [
+      "No opportunity to cure a material breach.",
+      "The cure period is shorter than five days."
+    ]
+  },
+  {
+    "id": "termination-03",
+    "category": "Termination",
+    "title": "Effect of termination",
+    "standard_text": "When this agreement ends, each party returns or deletes the other party's confidential material within thirty days, except for one copy kept where the law requires retention. Accrued payment obligations and clauses that by their nature should survive remain in effect.",
+    "red_flags": [
+      "Termination erases payment obligations that have already accrued.",
+      "A party must destroy records that the law requires it to keep."
+    ]
+  },
+  {
+    "id": "liability-01",
+    "category": "Liability",
+    "title": "Liability cap",
+    "standard_text": "Each party's total liability arising out of this agreement is limited to the fees paid under this agreement during the twelve months before the claim, except where this agreement states a narrower carve-out.",
+    "red_flags": [
+      "One party's liability is uncapped while the other party's liability is capped.",
+      "The cap is less than the fees paid for the current order."
+    ]
+  },
+  {
+    "id": "liability-02",
+    "category": "Liability",
+    "title": "Excluded damages",
+    "standard_text": "Neither party is liable for indirect, incidental, special, or consequential damages, or for lost profits, except to the extent caused by fraud or willful misconduct.",
+    "red_flags": [
+      "Lost profits are recoverable as direct damages without a stated limit.",
+      "The exclusion of consequential damages applies to only one party."
+    ]
+  },
+  {
+    "id": "liability-03",
+    "category": "Liability",
+    "title": "Carve-outs from the cap",
+    "standard_text": "The liability cap does not apply to fraud, willful misconduct, or a breach of the confidentiality clause. The cap continues to apply to ordinary negligence.",
+    "red_flags": [
+      "Any negligence claim is uncapped.",
+      "The carve-out list includes ordinary service failures or missed deadlines."
+    ]
+  },
+  {
+    "id": "indemnity-01",
+    "category": "Indemnity",
+    "title": "Mutual intellectual-property indemnity",
+    "standard_text": "Each party will defend the other against a third-party claim that materials it supplied infringe that third party's intellectual-property right, and will pay damages finally awarded on that claim.",
+    "red_flags": [
+      "Only one party gives an intellectual-property indemnity.",
+      "The indemnity covers claims that the indemnified party caused by modifying the materials."
+    ]
+  },
+  {
+    "id": "indemnity-02",
+    "category": "Indemnity",
+    "title": "Indemnity subject to the liability cap",
+    "standard_text": "Amounts payable under an indemnity are part of the paying party's liability cap, except for a third-party intellectual-property claim covered by the mutual intellectual-property indemnity.",
+    "red_flags": [
+      "Every indemnity is uncapped.",
+      "The indemnity requires payment of the other party's lost profits."
+    ]
+  },
+  {
+    "id": "indemnity-03",
+    "category": "Indemnity",
+    "title": "Control of the defense",
+    "standard_text": "The indemnified party gives prompt written notice of the claim, and the indemnifying party controls the defense. A settlement that imposes an obligation on the indemnified party requires that party's prior written consent, which will not be unreasonably withheld.",
+    "red_flags": [
+      "The indemnified party may settle a claim and bind the other party without consent.",
+      "Notice that is late by a few days automatically cancels the indemnity."
+    ]
+  },
+  {
+    "id": "payment-01",
+    "category": "Payment",
+    "title": "Invoice timing",
+    "standard_text": "The customer pays undisputed invoices within thirty days after receipt. The supplier issues invoices only for services or goods that have been delivered.",
+    "red_flags": [
+      "Payment is due before delivery.",
+      "The payment period is shorter than ten days."
+    ]
+  },
+  {
+    "id": "payment-02",
+    "category": "Payment",
+    "title": "Late amounts",
+    "standard_text": "A late undisputed amount accrues interest at one percent per month, or the highest rate allowed by law if that rate is lower. Interest is not compounded.",
+    "red_flags": [
+      "A late payment triggers a flat penalty above the overdue amount.",
+      "Interest is compounded more often than monthly."
+    ]
+  },
+  {
+    "id": "payment-03",
+    "category": "Payment",
+    "title": "Disputed invoices",
+    "standard_text": "The customer may withhold the portion of an invoice that it disputes in good faith, if it gives a written reason before the due date and pays the undisputed portion on time.",
+    "red_flags": [
+      "Any dispute makes the entire invoice immediately due.",
+      "The customer must pay a disputed amount before it can raise the dispute."
+    ]
+  },
+  {
+    "id": "confidentiality-01",
+    "category": "Confidentiality",
+    "title": "Use and duration",
+    "standard_text": "Each party uses the other party's confidential information only to perform this agreement and protects it with reasonable care. The duty lasts for three years after the agreement ends, and lasts longer for information that remains a trade secret.",
+    "red_flags": [
+      "The confidentiality duty never expires, including for ordinary business information.",
+      "A party may use confidential information for purposes other than performing this agreement."
+    ]
+  },
+  {
+    "id": "confidentiality-02",
+    "category": "Confidentiality",
+    "title": "Standard exclusions",
+    "standard_text": "Confidential information does not include information that the receiving party already knew without a duty of confidence, that is or becomes public through no fault of the receiving party, or that the receiving party independently develops.",
+    "red_flags": [
+      "There is no exclusion for information that is already public.",
+      "Information shared with one employee is treated as public."
+    ]
+  },
+  {
+    "id": "confidentiality-03",
+    "category": "Confidentiality",
+    "title": "Compelled disclosure",
+    "standard_text": "A party may disclose confidential information when the law requires it, after giving prompt notice to the other party when notice is legally permitted, and it discloses only the portion required.",
+    "red_flags": [
+      "A party may disclose confidential information whenever it considers disclosure useful.",
+      "A legally required disclosure is itself a breach even when the party limits what it discloses."
+    ]
+  },
+  {
+    "id": "auto-renewal-01",
+    "category": "Auto-renewal",
+    "title": "Renewal requires a written choice",
+    "standard_text": "This agreement ends on the stated end date unless a party sends a written renewal notice at least fifteen days before that date. Silence does not renew the agreement.",
+    "red_flags": [
+      "The agreement renews unless a party cancels.",
+      "A renewal notice is valid only if sent more than ninety days before the end date."
+    ]
+  },
+  {
+    "id": "auto-renewal-02",
+    "category": "Auto-renewal",
+    "title": "Notice window when renewal is automatic",
+    "standard_text": "If the parties expressly agree that the term renews automatically, either party may stop the renewal by written notice at least thirty days before the renewal date. The supplier sends a reminder at least forty-five days before that deadline.",
+    "red_flags": [
+      "The cancellation window closes more than sixty days before renewal.",
+      "No reminder is required before an automatic renewal."
+    ]
+  },
+  {
+    "id": "auto-renewal-03",
+    "category": "Auto-renewal",
+    "title": "Renewal term and price",
+    "standard_text": "A renewal term is no longer than the initial term. A price change on renewal takes effect only if the supplier states the new price in the reminder and the other party does not reject it before the renewal date.",
+    "red_flags": [
+      "The renewal term is longer than the initial term.",
+      "The price may increase on renewal without a stated amount and without a chance to reject it."
+    ]
+  },
+  {
+    "id": "intellectual-property-01",
+    "category": "Intellectual property ownership",
+    "title": "Pre-existing material",
+    "standard_text": "Each party keeps all intellectual-property rights in material it created before this agreement or creates outside the services. No assignment of that material is implied.",
+    "red_flags": [
+      "One party assigns all pre-existing intellectual property to the other party.",
+      "Feedback or a bug report assigns ownership of the receiving party's product."
+    ]
+  },
+  {
+    "id": "intellectual-property-02",
+    "category": "Intellectual property ownership",
+    "title": "Ownership of paid deliverables",
+    "standard_text": "The customer owns deliverables that the agreement identifies and that the customer has paid for, excluding the supplier's pre-existing tools. The supplier keeps those tools and grants the customer a license to use them as part of the deliverable.",
+    "red_flags": [
+      "The supplier keeps ownership of custom deliverables that the customer paid for.",
+      "The customer receives no license to the tools needed to use a deliverable."
+    ]
+  },
+  {
+    "id": "intellectual-property-03",
+    "category": "Intellectual property ownership",
+    "title": "Limited license to customer material",
+    "standard_text": "The customer grants the supplier a license to use customer material only to perform this agreement. The license ends when the agreement ends, except for copies retained as required by law.",
+    "red_flags": [
+      "The supplier may use customer material to train a general model or for other customers.",
+      "The license to customer material continues without a time limit after the agreement ends."
+    ]
+  },
+  {
+    "id": "non-compete-01",
+    "category": "Non-compete",
+    "title": "No general business restriction",
+    "standard_text": "Neither party is barred from offering ordinary goods or services to other customers. The only competitive restriction in this agreement is the employee non-solicit clause.",
+    "red_flags": [
+      "A party may not do business with any customer in the same industry.",
+      "A non-compete lasts more than twelve months after the agreement ends."
+    ]
+  },
+  {
+    "id": "non-compete-02",
+    "category": "Non-compete",
+    "title": "Limited employee non-solicit",
+    "standard_text": "During the agreement and for six months after it ends, a party will not knowingly solicit an employee of the other party with whom it had direct contact under this agreement. General job advertisements are allowed.",
+    "red_flags": [
+      "The non-solicit covers every employee of a corporate group.",
+      "The restriction lasts more than twelve months."
+    ]
+  },
+  {
+    "id": "non-compete-03",
+    "category": "Non-compete",
+    "title": "Scope of any restriction",
+    "standard_text": "Any non-solicit or similar restriction is limited to the services described in this agreement and to the territory where those services were performed. It does not restrict work that does not use the other party's confidential information.",
+    "red_flags": [
+      "The restriction has no geographic or service limit.",
+      "The restriction forbids work that does not use the other party's confidential information."
+    ]
+  },
+  {
+    "id": "governing-law-01",
+    "category": "Governing law",
+    "title": "Named governing law",
+    "standard_text": "This agreement is governed by the laws of the jurisdiction named in the order form, without applying that jurisdiction's conflict-of-law rules.",
+    "red_flags": [
+      "The governing law is not named.",
+      "Conflict-of-law rules are included and can point to a different jurisdiction."
+    ]
+  },
+  {
+    "id": "governing-law-02",
+    "category": "Governing law",
+    "title": "No unilateral change of law",
+    "standard_text": "A party cannot change the governing law by updating a website, policy, or order form after signature. A change requires a written amendment signed by both parties.",
+    "red_flags": [
+      "One party may change the governing law by posting a new policy.",
+      "The governing law follows the location of whichever party requests the change."
+    ]
+  },
+  {
+    "id": "governing-law-03",
+    "category": "Governing law",
+    "title": "Courts of the same jurisdiction",
+    "standard_text": "The courts of the same jurisdiction that supplies the governing law are the exclusive venue for disputes arising out of this agreement, except that a party may seek interim injunctive relief in a court that has jurisdiction over the subject of that relief.",
+    "red_flags": [
+      "The venue is a jurisdiction different from the governing law.",
+      "One party may choose any court after a dispute arises."
+    ]
+  },
+  {
+    "id": "dispute-resolution-01",
+    "category": "Dispute resolution",
+    "title": "Discussion before filing",
+    "standard_text": "Before starting a formal proceeding, the parties' representatives will discuss the dispute in good faith for fifteen days after one party gives written notice of it. This waiting period does not apply to a request for interim injunctive relief.",
+    "red_flags": [
+      "A party must wait more than sixty days before it can file a claim.",
+      "The waiting period blocks a request for interim injunctive relief."
+    ]
+  },
+  {
+    "id": "dispute-resolution-02",
+    "category": "Dispute resolution",
+    "title": "Court remains available",
+    "standard_text": "Either party may bring a claim in the venue stated in this agreement. Binding arbitration applies only if the order form says that both parties agree to it for that claim.",
+    "red_flags": [
+      "Arbitration is mandatory even though the order form does not select it.",
+      "Only one party may choose to go to court."
+    ]
+  },
+  {
+    "id": "dispute-resolution-03",
+    "category": "Dispute resolution",
+    "title": "Interim relief",
+    "standard_text": "Either party may ask a court for interim or injunctive relief to protect confidential information or intellectual property, without first completing negotiation or arbitration.",
+    "red_flags": [
+      "Injunctive relief is waived.",
+      "A party must finish arbitration before it can ask a court to stop misuse of confidential information."
+    ]
+  }
+]

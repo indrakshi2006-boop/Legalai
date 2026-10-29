@@ -1,0 +1,29 @@
+[server]
+maxUploadSize = 15
+# Listen on this computer only. Setting the address also stops Streamlit's
+# start-up lookup of the public IP (checkip.amazonaws.com) in headless mode.
+address = "localhost"
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+
+# Cool paper grey with legal-ink blue. Fonts are Streamlit's bundled Source
+# Sans / Source Serif, so no font is fetched from the internet.
+[theme]
+base = "light"
+primaryColor = "#1D5C7A"
+backgroundColor = "#F5F7F9"
+secondaryBackgroundColor = "#E9EEF3"
+textColor = "#1C2433"
+linkColor = "#1D5C7A"
+borderColor = "#D5DBE3"
+font = "sans-serif"
+headingFont = "serif"
+baseRadius = "small"
+showWidgetBorder = true
+
+[theme.sidebar]
+backgroundColor = "#EDF1F5"
