@@ -22,6 +22,7 @@ import report
 ROOT = Path(__file__).resolve().parents[1]
 APP = str(ROOT / "app.py")
 SAMPLE = ROOT / "docs" / "figures" / "synthetic-contract-v2.pdf"
+UPLOADED_SAMPLE = ROOT / "docs" / "figures" / "AEGIS_synthetic_contract_test.pdf"
 FIXTURE_NOTE = "Fixture comparison used by the interface test. This is not a live model review."
 XSS_CONTRACT = (
     "SAMPLE AGREEMENT\n"
@@ -145,7 +146,7 @@ def test_empty_state_header_sidebar_and_privacy(missing_index):
     sidebar = _texts(page.sidebar.markdown)
     assert "**Provider:** OpenAI" in sidebar
     assert "text-embedding-ada-002" in sidebar and "gpt-4o" in sidebar
-    assert "Contract text leaves it only when you" in sidebar
+    assert "Text is sent to the configured provider only when you start a review or ask a question" in sidebar
     assert "Playbook index: Missing" in _texts(page.sidebar.error)
     assert "python embed.py playbook" in _texts(page.sidebar.code)
     assert "15 MB and 40 pages" in sidebar
@@ -197,7 +198,7 @@ def test_accepted_pdf_shows_clause_count_call_limits_and_consent(ready):
     page = _upload(_page(), SAMPLE.read_bytes(), "synthetic-contract-v2.pdf")
     assert "8 clauses to review and 1 preamble block" in _texts(page.success)
     text = _all_text(page)
-    assert "at most **16 embedding calls** and **8 chat calls** to OpenAI" in text
+    assert "up to 16 text-matching calls and 8 analysis calls to OpenAI" in text
     assert _button(page, "Review contract").disabled is True, "disabled until consent"
     _checkbox(page, "I agree to send this contract's text to OpenAI").check().run()
     assert _button(page, "Review contract").disabled is False
@@ -244,8 +245,8 @@ def test_completed_review_dashboard_cards_and_exports(ready):
     saved = page.session_state["review"]
     assert saved["status"] == "complete"
     assert report.is_preamble(saved["rows"][0])
-    assert [m.label for m in page.metric] == ["✓ Safe", "⚠ Caution", "✕ Risky", "? Review required"]
-    assert [m.value for m in page.metric] == ["0", "1", "1", "0"]
+    assert [m.label for m in page.metric] == ["Prototype health score", "✓ Safe", "⚠ Caution", "✕ Risky", "? Review required"]
+    assert [m.value for m in page.metric] == ["40/100", "0", "1", "1", "0"]
     assert "matched a Risky wording rule" in _texts(page.markdown)
     titles = [expander.label.replace("\\", "") for expander in page.expander]
     assert any(title.startswith("✕ Risky: 2. Only the supplier") for title in titles)
@@ -263,13 +264,52 @@ def test_completed_review_dashboard_cards_and_exports(ready):
     assert not [button for button in page.button if button.label == "Review contract"]
 
 
+def test_synthetic_contract_drives_summary_heatmap_and_annotated_view(ready):
+    page = _review(_upload(_page(), SAMPLE.read_bytes(), "synthetic-contract-v2.pdf"))
+    saved = page.session_state["review"]
+    assert saved["status"] == "complete"
+    assert ready.compare == 8
+    assert "Prototype health score" in [metric.label for metric in page.metric]
+    assert "Risk heatmap" in [tab.label for tab in page.get("tab")]
+    assert page.get("dataframe"), "risk heatmap table renders"
+    assert any("Original extracted contract text" in str(element.proto.body) for element in page.get("html"))
+    assert report.health_score(saved["rows"]) is not None
+    assert len(report.heatmap_rows(saved["rows"])) == len(report.reviewed_rows(saved["rows"]))
+
+
+@pytest.mark.skipif(not UPLOADED_SAMPLE.exists(), reason="Optional user-uploaded synthetic PDF is not in this checkout")
+def test_uploaded_20_clause_pdf_shows_results_only_after_review_and_reuses_rows(ready):
+    page = _upload(_page(), UPLOADED_SAMPLE.read_bytes(), UPLOADED_SAMPLE.name)
+    assert "20 clauses to review" in _texts(page.success)
+    assert "Complete the contract review above" in _texts(page.info)
+    assert ready.compare == 0
+
+    page = _review(page)
+    saved = page.session_state["review"]
+    assert saved["status"] == "complete"
+    assert len(report.reviewed_rows(saved["rows"])) == 20
+    assert ready.compare == 20
+    assert {tab.label for tab in page.get("tab")} >= {
+        "Summary",
+        "Clause report",
+        "Annotated text",
+        "Risk heatmap",
+    }
+    assert page.get("dataframe"), "the heatmap is connected and rendered"
+
+    page.run()
+    assert ready.compare == 20, "rendering and rerunning the results must not repeat provider calls"
+
+
 def test_annotated_view_is_escaped_and_marks_every_block(ready):
     page = _review(_upload(_page(), _pdf(XSS_CONTRACT)))
     markup = " ".join(str(element.proto.body) for element in page.get("html"))
     assert "<script>alert(1)" not in markup
     assert "&lt;script&gt;" in markup
-    assert markup.count('class="aegis-clause"') == 3
-    assert "Preamble - not reviewed" in markup and "Risky" in markup
+    assert 'class="aegis-source-viewer"' in markup
+    assert 'id="source-clause-002"' in markup and 'id="source-clause-003"' in markup
+    assert "Original extracted contract text" in markup and "Risky" in markup
+    assert "#report-clause-003" in markup
 
 
 def test_filters_search_and_sort(ready):
@@ -298,7 +338,7 @@ def test_no_credit_stops_early_and_keeps_partial_results(ready):
     assert "Retrying will not help." in errors_text
     assert "rate limit" not in errors_text.lower()
     assert any(e.label.startswith("2 clause(s) could not be compared") for e in page.expander)
-    assert [m.value for m in page.metric] == ["0", "0", "0", "2"]
+    assert [m.value for m in page.metric] == ["Not available", "0", "0", "0", "2"]
 
 
 def test_network_failure_before_the_review(ready, monkeypatch):

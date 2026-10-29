@@ -79,7 +79,7 @@ def read_contract_pdf(data, max_bytes=None, max_pages=None):
             "This PDF has no extractable text. It appears to be image-only, "
             "and OCR is not available, so it was not accepted."
         )
-    return {"ok": True, "text": text, "page_count": page_count}
+    return {"ok": True, "text": text, "page_count": page_count, "pages": parts}
 
 
 def _pdf_error(message):

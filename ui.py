@@ -161,6 +161,67 @@ def annotated_contract_html(rows):
     return ANNOTATED_CSS + '<div class="aegis-page" role="document">' + "".join(blocks) + "</div>"
 
 
+def annotated_source_html(source_text, rows, selected_id=""):
+    """Show the original extracted text and highlight only verified clause spans."""
+    source_text = source_text or ""
+    spans = []
+    uncertain = []
+    for row in report.reviewed_rows(rows):
+        clause = row.get("contract_text") or ""
+        start = row.get("start")
+        if (
+            not isinstance(start, int)
+            or start < 0
+            or not clause
+            or source_text[start : start + len(clause)] != clause
+        ):
+            uncertain.append(row)
+            continue
+        spans.append((start, start + len(clause), row))
+
+    spans.sort(key=lambda span: (span[0], span[1]))
+    output = []
+    cursor = 0
+    for start, end, row in spans:
+        if start < cursor:
+            uncertain.append(row)
+            continue
+        output.append(html.escape(source_text[cursor:start]))
+        label = row.get("label") or "Review required"
+        _, ink, paper = LABEL_STYLE.get(label, LABEL_STYLE["Review required"])
+        clause_id = html.escape(str(row.get("clause_id") or ""), quote=True)
+        selected = str(row.get("clause_id") or "") == selected_id
+        outline = "outline:2px solid #1D5C7A;" if selected else ""
+        output.append(
+            f'<mark id="source-{clause_id}" style="background:{paper};color:{ink};{outline}" '
+            f'title="{html.escape(label)}: {clause_id}">'
+            f'{html.escape(source_text[start:end])}</mark>'
+        )
+        cursor = end
+    output.append(html.escape(source_text[cursor:]))
+    uncertain = list({str(row.get("clause_id")): row for row in uncertain}.values())
+    note = ""
+    if uncertain:
+        note = (
+            "<p><strong>Some clauses could not be highlighted safely:</strong> "
+            + html.escape(", ".join(str(row.get("clause_id") or "") for row in uncertain))
+            + ". Select one below to inspect it separately.</p>"
+        )
+    report_links = "".join(
+        f'<a href="#report-{html.escape(str(row.get("clause_id") or ""), quote=True)}">'
+        f'{html.escape(str(row.get("clause_id") or "Clause"))} report</a> '
+        for row in spans and [span[2] for span in spans] or []
+    )
+    return (
+        '<div class="aegis-source-viewer">'
+        '<p>Original extracted contract text. Colors show risk level; select a clause below to view its finding.</p>'
+        f'{note}<pre>{"".join(output)}</pre><nav>{report_links}</nav></div>'
+        '<style>.aegis-source-viewer pre{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;'
+        'padding:1rem;border:1px solid #D5DBE3;border-radius:6px;background:#fff;color:#1C2433;}'
+        '.aegis-source-viewer mark{border-radius:2px}</style>'
+    )
+
+
 def _finding_html(row):
     parts = []
     category = row.get("category") or "Not classified"

@@ -44,6 +44,8 @@ def test_pdf_validation():
     assert accepted["ok"] is True
     assert accepted["page_count"] == 1
     assert "supplier delivers" in accepted["text"]
+    assert len(accepted["pages"]) == accepted["page_count"]
+    assert "\n".join(accepted["pages"]) == accepted["text"]
 
 
 def test_counts_and_downloads_use_actual_rows():

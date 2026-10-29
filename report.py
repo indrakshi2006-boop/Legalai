@@ -12,6 +12,9 @@ import segment
 import utils as Utils
 
 LABELS = ("Safe", "Caution", "Risky", "Review required")
+# Prototype score weights: Safe=100, Caution=60, Risky=20. Review-required
+# clauses are excluded because their risk was not assessed, and are reported separately.
+HEALTH_POINTS = {"Safe": 100, "Caution": 60, "Risky": 20}
 RUN_FIELDS = ("provider", "embedding_model", "chat_model")
 PREAMBLE_STATUS = "Preamble - not reviewed"
 PREAMBLE_NOTE = (
@@ -211,6 +214,73 @@ def count_labels(rows):
             label = "Review required"
         counts[label] += 1
     return counts
+
+
+def health_score(rows):
+    """Return a transparent prototype score, or None when nothing was scored.
+
+    Only validated Safe/Caution/Risky results enter the denominator. Clauses
+    marked Review required are not silently treated as Safe.
+    """
+    counts = count_labels(rows)
+    scored = sum(counts[label] for label in HEALTH_POINTS)
+    if not scored:
+        return None
+    points = sum(counts[label] * HEALTH_POINTS[label] for label in HEALTH_POINTS)
+    return round(points / scored)
+
+
+def recommended_action(row):
+    """Conservative, rule-based next step; does not create new legal analysis."""
+    label = row.get("label") or "Review required"
+    if label == "Risky":
+        return "Prioritize review with qualified counsel; discuss narrowing or balancing the identified wording."
+    if label == "Caution":
+        return "Clarify the identified difference and consider aligning it with the playbook provision."
+    if label == "Safe":
+        return "No targeted issue was identified by the current rules; confirm the wording fits the business deal."
+    return "Manually compare the full clause with the playbook; no risk conclusion was produced."
+
+
+def priority_of(row):
+    return {
+        "Risky": "High",
+        "Caution": "Medium",
+        "Review required": "Manual review",
+        "Safe": "Routine",
+    }.get(row.get("label"), "Manual review")
+
+
+def heatmap_rows(rows):
+    """Project the same analyzed result rows into display-ready heatmap records."""
+    ordered = sorted(
+        reviewed_rows(rows),
+        key=lambda row: (ui_risk_order(row.get("label")), _row_position(row)),
+    )
+    return [
+        {
+            "Clause": row.get("clause_id") or "",
+            "Heading": row.get("heading") or "",
+            "Risk tier": row.get("label") or "Review required",
+            "Explanation": row.get("explanation") or "No comparison explanation was produced.",
+            "Playbook deviation": "; ".join(row.get("deviations") or []) or ("No deviation recorded" if row.get("evidence_id") else "No matching playbook evidence"),
+            "Recommended action": recommended_action(row),
+            "Priority": priority_of(row),
+        }
+        for row in ordered
+    ]
+
+
+def ui_risk_order(label):
+    return {"Risky": 0, "Caution": 1, "Review required": 2, "Safe": 3}.get(label, 2)
+
+
+def _row_position(row):
+    start = row.get("start")
+    if isinstance(start, int):
+        return start
+    digits = "".join(char for char in str(row.get("clause_id") or "") if char.isdigit())
+    return int(digits) if digits else 0
 
 
 CSV_FIELDS = (

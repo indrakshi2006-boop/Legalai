@@ -18,6 +18,7 @@ import streamlit as ST
 import agent as Agent
 import embed
 import errors as Errors
+import legal_case as LegalCase
 import providers
 import report
 import retry as Retry
@@ -119,8 +120,7 @@ def render_header(config):
     ST.title(PRODUCT)
     ST.markdown(PURPOSE)
     ST.warning(
-        f"**{NOT_ADVICE}** Labels are rule outputs for wording differences, not legal conclusions, "
-        "and the tool has not been evaluated for legal accuracy.",
+        f"**{NOT_ADVICE}** Risk labels flag wording for review; they are not legal conclusions.",
         icon=":material/gavel:",
     )
     if config is not None and config.name == providers.GEMINI:
@@ -164,13 +164,8 @@ def render_sidebar(config, status):
 
         ST.subheader("Privacy")
         ST.markdown(
-            "Uploading and checking a PDF happens on this computer. Contract text leaves it only when you:\n"
-            f"- **start a review**: each clause is sent to {config.label} for embeddings "
-            f"({config.embedding_model}) and comparison ({config.chat_model});\n"
-            f"- **ask a question**: the question and the matching passages are sent to {config.label} "
-            f"({config.chat_model}), only if a passage matches.\n\n"
-            "The review does not write the contract to disk or into the playbook or regulation indexes. "
-            "Results are kept in the app's memory for this browser session."
+            "PDF checks run on this computer. Text is sent to the configured provider only when you start a review "
+            "or ask a question. Files are not added to the playbook; results stay in this browser session."
         )
         if config.name == providers.GEMINI:
             ST.caption(
@@ -218,9 +213,8 @@ def render_review(config, status, document):
     limits = report_limits(count)
     blockers = review_blockers(config, status)
     ST.markdown(
-        f"This review compares **{count} clauses** with the playbook. It makes at most "
-        f"**{limits['embed']} embedding calls** and **{limits['chat']} chat calls** to {config.label}. "
-        "Retries count toward those limits, so they are never exceeded."
+        f"Compare **{count} clauses** with the playbook. This review makes up to "
+        f"{limits['embed']} text-matching calls and {limits['chat']} analysis calls to {config.label}."
     )
     for message, command in blockers:
         ST.error(message, icon=":material/block:")
@@ -282,7 +276,14 @@ def run_review(config, document, fingerprint):
     count = len(document["reviewable"])
     limits = report_limits(count)
     policy = Retry.CallPolicy(provider=config.label, budget=Retry.CallBudget(**limits))
-    record = {"fingerprint": fingerprint, "name": document["name"], "status": "error", "message": "", "rows": []}
+    record = {
+        "fingerprint": fingerprint,
+        "name": document["name"],
+        "source_text": document["text"],
+        "status": "error",
+        "message": "",
+        "rows": [],
+    }
     with ST.status(f"Reviewing {count} clauses with {config.label}...", expanded=True) as box:
         progress = ST.progress(0.0, text=f"Clause 0 of {count}")
         log = ST.container()
@@ -322,7 +323,11 @@ def run_review(config, document, fingerprint):
 
 def render_results(fingerprint):
     saved = ST.session_state.get("review")
-    if not saved or saved.get("fingerprint") != fingerprint:
+    if not saved:
+        ST.info("Complete the contract review above to see the summary, clause report, annotated text, and risk heatmap.")
+        return
+    if saved.get("fingerprint") != fingerprint:
+        ST.info("These results belong to a different file or review setup. Run the review above to create matching results.")
         return
     ST.subheader("3  Results", divider="gray")
     if saved["status"] == "error":
@@ -339,27 +344,45 @@ def render_results(fingerprint):
                 for warning in row.get("warnings") or []:
                     ST.caption(warning)
 
-    overview, clauses, annotated, downloads = ST.tabs(["Overview", "Clauses", "Annotated contract", "Download"])
+    overview, clauses, annotated, heatmap, downloads = ST.tabs(
+        ["Summary", "Clause report", "Annotated text", "Risk heatmap", "Download"]
+    )
     with overview:
         render_overview(rows)
     with clauses:
         render_clause_list(rows)
     with annotated:
-        ST.caption(
-            "The full contract with each clause marked by its label. Select a clause to see its finding. "
-            "Streamlit cannot jump from here to a card in another tab, so each finding opens in place."
-        )
-        ST.html(ui.annotated_contract_html(rows))
+        render_annotated_text(saved.get("source_text") or "", rows)
+    with heatmap:
+        render_heatmap(rows)
     with downloads:
         render_downloads(saved["name"], rows, saved.get("finished"))
 
 
 def render_overview(rows):
     counts = report.count_labels(rows)
+    score = report.health_score(rows)
+    if score is None:
+        ST.metric("Prototype health score", "Not available")
+        ST.info("No clauses have a scored result. Review required clauses manually; they are not counted as Safe.")
+    else:
+        ST.metric("Prototype health score", f"{score}/100")
+        ST.caption("Prototype estimate: Safe 100, Caution 60, Risky 20. Unreviewed clauses are excluded.")
     columns = ST.columns(4)
     for column, label in zip(columns, report.LABELS):
-        column.metric(ui.label_text(label), counts[label])
-    ST.markdown(f"**Overall:** {ui.overall_profile(rows)}")
+        with column.container(border=True):
+            ST.metric(ui.label_text(label), counts[label])
+    ST.caption(f"Overall: {ui.overall_profile(rows)}")
+    priorities = ui.sort_rows(report.reviewed_rows(rows), "risk")
+    highest = [row for row in priorities if row.get("label") in {"Risky", "Caution", "Review required"}]
+    if highest:
+        ST.markdown("**Highest-priority items**")
+        for row in highest[:5]:
+            ST.markdown(
+                f"- **{ui.label_text(row.get('label') or 'Review required')} — "
+                f"{ui.md_escape(row.get('clause_id') or '')} {ui.md_escape(row.get('heading') or '')}:** "
+                f"{ui.md_escape(row.get('explanation') or (row.get('warnings') or ['Manual review needed.'])[0])}"
+            )
     preamble = [row for row in rows if report.is_preamble(row)]
     if preamble:
         ST.caption(f"{ui.label_text(report.PREAMBLE_STATUS)}: {len(preamble)} block(s), not counted above.")
@@ -380,14 +403,9 @@ def render_overview(rows):
             color=ALT.Color("Label:N", scale=ALT.Scale(domain=list(frame["Label"]), range=colours), legend=None),
             tooltip=["Label", "Clauses"],
         )
-        .properties(height=170)
+        .properties(height=125)
     )
-    ST.altair_chart(chart, width="stretch")
-    first = rows[0] if rows else {}
-    ST.caption(
-        f"Provider {first.get('provider') or 'not recorded'}, embedding model {first.get('embedding_model') or 'not recorded'}, "
-        f"chat model {first.get('chat_model') or 'not recorded'}."
-    )
+    ST.altair_chart(chart, width="stretch", theme="streamlit")
 
 
 def render_clause_list(rows):
@@ -411,42 +429,148 @@ def render_clause_list(rows):
                 ST.markdown(ui.quote_html(row.get("contract_text")), unsafe_allow_html=True)
 
 
-def render_clause_card(row):
+def render_clause_card(row, expanded=False):
     label = row.get("label") or "Review required"
     title = f"{ui.label_text(label)}: {ui.md_escape(row.get('heading') or row['clause_id'])}"
-    with ST.expander(title):
-        ST.markdown(
-            f"{ui.badge_html(label)} &nbsp; **Category:** {html.escape(row.get('category') or 'Not classified')} "
-            f"&nbsp; **Clause:** {html.escape(row['clause_id'])}",  # badge and ids are escaped HTML
-            unsafe_allow_html=True,
-        )
-        ST.markdown("**Contract text**")
-        ST.markdown(ui.quote_html(row.get("contract_text")), unsafe_allow_html=True)
-        if row.get("evidence_id"):
-            ST.markdown(
-                f"**Closest playbook clause:** {ui.md_escape(row['evidence_id'])} "
-                f"{ui.md_escape(row.get('reference_title') or '')} (similarity {ui.similarity_text(row.get('similarity'))})"
-            )
-            ST.markdown(ui.quote_html(row.get("reference_clause")), unsafe_allow_html=True)
-            ST.caption("Similarity only ranks playbook passages. It is not a risk score.")
-        else:
-            ST.markdown("**No playbook clause matched**, so this clause was not compared and needs a manual review.")
-        if row.get("explanation"):
-            ST.markdown("**In plain English**")
-            ST.markdown(ui.plain_html(row["explanation"]), unsafe_allow_html=True)
-        if row.get("deviations"):
-            ST.markdown("**Differences found**")
-            ST.markdown(ui.list_html(row["deviations"]), unsafe_allow_html=True)
+    ST.html(f'<span id="report-{html.escape(str(row.get("clause_id") or ""), quote=True)}"></span>')
+    with ST.expander(title, expanded=True):
+        left, right = ST.columns([5, 1])
+        left.markdown(f"**{ui.md_escape(row.get('heading') or row['clause_id'])}** · {ui.md_escape(row['clause_id'])}")
+        right.markdown(ui.badge_html(label), unsafe_allow_html=True)
+        explanation = row.get("explanation") or "No explanation was recorded."
+        brief = explanation.splitlines()[0].strip()
+        for ending in (". ", "! ", "? "):
+            if ending in brief:
+                brief = brief.split(ending, 1)[0] + ending[0]
+                break
+        ST.markdown(brief)
         reasons = [item for item in row.get("rule_reasons") or [] if item]
+        if not reasons:
+            reasons = [item for item in row.get("deviations") or [] if item]
         if reasons:
-            ST.markdown("**Why this label**")
-            ST.markdown(ui.list_html(reasons), unsafe_allow_html=True)
-        if row.get("evidence_id"):
-            ST.caption(f"Evidence id: {row['evidence_id']}. Comparison severity: {row.get('severity') or 'none'}.")
-        warnings = row.get("warnings") or []
-        if warnings:
-            ST.markdown("**Warnings**")
-            ST.markdown(ui.list_html(warnings), unsafe_allow_html=True)
+            ST.markdown(f"**Why it matters:** {ui.md_escape(reasons[0])}")
+        else:
+            ST.caption("Why it matters: no specific reason was recorded in this result.")
+        action = report.recommended_action(row)
+        ST.markdown(f"**Suggested action:** {ui.md_escape(action)}")
+        with ST.expander("Clause text and supporting evidence", expanded=expanded):
+            ST.markdown(f"**Category:** {html.escape(row.get('category') or 'Not classified')}")
+            ST.markdown("**Full clause text**")
+            ST.markdown(ui.quote_html(row.get("contract_text")), unsafe_allow_html=True)
+            ST.markdown("**Full explanation**")
+            ST.markdown(ui.plain_html(explanation), unsafe_allow_html=True)
+            if row.get("evidence_id"):
+                ST.markdown(
+                    f"**Playbook clause:** {ui.md_escape(row['evidence_id'])} "
+                    f"{ui.md_escape(row.get('reference_title') or '')} "
+                    f"(match {ui.similarity_text(row.get('similarity'))})"
+                )
+                ST.markdown(ui.quote_html(row.get("reference_clause")), unsafe_allow_html=True)
+                ST.caption("Match strength ranks passages; it is not a risk score.")
+            else:
+                ST.info("No playbook match was found. This clause needs manual review.")
+            if row.get("deviations"):
+                ST.markdown("**Differences found**")
+                ST.markdown(ui.list_html(row["deviations"]), unsafe_allow_html=True)
+            if reasons:
+                ST.markdown("**Why this label**")
+                ST.markdown(ui.list_html(reasons), unsafe_allow_html=True)
+            if row.get("evidence_id"):
+                ST.caption(f"Evidence id: {row['evidence_id']}. Comparison severity: {row.get('severity') or 'none'}.")
+            warnings = row.get("warnings") or []
+            if warnings:
+                ST.markdown("**Warnings**")
+                ST.markdown(ui.list_html(warnings), unsafe_allow_html=True)
+
+
+def render_annotated_text(source_text, rows):
+    reviewed = report.reviewed_rows(rows)
+    if not source_text:
+        ST.warning("The source text was not retained for this result. Use the clause report to inspect extracted clauses.")
+        return
+    options = [row.get("clause_id") or "" for row in reviewed]
+    labels = {
+        row.get("clause_id") or "": f"{row.get('clause_id') or 'Clause'} — "
+        f"{row.get('heading') or '(no heading)'} — {row.get('label') or 'Review required'}"
+        for row in reviewed
+    }
+    selected_id = ST.selectbox(
+        "Choose a highlighted clause to see its finding below",
+        options,
+        format_func=lambda value: labels.get(value, value),
+        key="annotated_clause_selection",
+    ) if options else ""
+    ST.html(ui.annotated_source_html(source_text, rows, selected_id))
+    selected = next((row for row in reviewed if (row.get("clause_id") or "") == selected_id), None)
+    if selected:
+        ST.subheader(f"{selected.get('clause_id')} — {selected.get('heading') or 'Clause'}")
+        ST.markdown(f"**Risk tier:** {ui.label_text(selected.get('label') or 'Review required')}")
+        ST.markdown("**Contract wording**")
+        ST.markdown(ui.quote_html(selected.get("contract_text") or ""), unsafe_allow_html=True)
+        if selected.get("explanation"):
+            ST.markdown("**AI-generated interpretation**")
+            ST.markdown(ui.plain_html(selected["explanation"]), unsafe_allow_html=True)
+        if selected.get("evidence_id"):
+            ST.markdown(f"**Playbook comparison:** {ui.md_escape(selected['evidence_id'])} {ui.md_escape(selected.get('reference_title') or '')}")
+            ST.markdown(ui.quote_html(selected.get("reference_clause") or ""), unsafe_allow_html=True)
+        else:
+            ST.info("No matching playbook evidence was found; this clause was not compared.")
+        ST.markdown("**Suggested action**")
+        ST.markdown(ui.plain_html(report.recommended_action(selected)), unsafe_allow_html=True)
+        ST.markdown(f"[Open {selected.get('clause_id')} in the clause report](#report-{selected.get('clause_id')})")
+
+
+def render_heatmap(rows):
+    """Sortable, filterable view over the already-scored result rows."""
+    records = report.heatmap_rows(rows)
+    if not records:
+        ST.info("No reviewed clauses are available for the heatmap.")
+        return
+    labels = list(report.LABELS)
+    selected_labels = ST.multiselect(
+        "Show risk levels", labels, default=labels, format_func=ui.label_text, key="heatmap_labels"
+    )
+    visible = [record for record in records if record["Risk tier"] in selected_labels]
+    ST.caption(f"Showing {len(visible)} of {len(records)} clauses. Click a column heading to sort.")
+    frame = PD.DataFrame(visible)
+    palette = {
+        label: {"color": ui.LABEL_STYLE[label][1], "background-color": ui.LABEL_STYLE[label][2]}
+        for label in report.LABELS
+    }
+
+    def colour_tier(column):
+        return [
+            f"color: {palette.get(value, palette['Review required'])['color']}; "
+            f"background-color: {palette.get(value, palette['Review required'])['background-color']}; font-weight: 600"
+            for value in column
+        ]
+
+    styled = frame.style.apply(colour_tier, subset=["Risk tier"])
+    event = ST.dataframe(
+        styled,
+        hide_index=True,
+        width="stretch",
+        height="auto",
+        column_config={
+            "Clause": ST.column_config.TextColumn("Clause", width="small"),
+            "Heading": ST.column_config.TextColumn("Clause name", width="medium"),
+            "Risk tier": ST.column_config.TextColumn("Risk", width="small"),
+            "Explanation": ST.column_config.TextColumn("Why", width="large"),
+            "Playbook deviation": ST.column_config.TextColumn("Difference", width="large"),
+            "Recommended action": ST.column_config.TextColumn("Suggested action", width="large"),
+            "Priority": ST.column_config.TextColumn("Priority", width="small"),
+        },
+        on_select="rerun",
+        selection_mode="single-row",
+        key="risk_heatmap_table",
+    )
+    selected_rows = event.selection.rows if event and hasattr(event, "selection") else []
+    if selected_rows and selected_rows[0] < len(visible):
+        selected_id = visible[selected_rows[0]]["Clause"]
+        selected = next((row for row in report.reviewed_rows(rows) if row.get("clause_id") == selected_id), None)
+        if selected:
+            ST.markdown(f"### {selected.get('clause_id')} — {selected.get('heading') or 'Clause'}")
+            render_clause_card(selected, expanded=True)
 
 
 def render_downloads(source_name, rows, finished):
@@ -570,8 +694,7 @@ def render_support_chat(config):
         ST.error("Customer Support Chat uses Gemini. Set AEGIS_PROVIDER=gemini in .env, then restart.")
         return
     ST.caption(
-        f"Gemini ({config.chat_model}) answers from the sample support knowledge base. "
-        "The free tier may use submitted content to improve Google products; use synthetic or non-confidential questions only."
+        "Ask a question about the sample support topics. Use synthetic or non-confidential text only; free-tier data may be used to improve Google products."
     )
     if not config.key_present:
         ST.info("Set GEMINI_API_KEY in the project .env file, then restart the app.", icon=":material/key:")
@@ -604,16 +727,263 @@ def render_support_chat(config):
         ST.rerun()
 
 
+def _start_case_analysis(fingerprint):
+    ST.session_state["case_analysis_request"] = fingerprint
+
+
+def render_legal_case_analysis(config):
+    """Separate, consent-gated case summary path. It never calls contract review."""
+    ST.title("Legal Case Analysis")
+    ST.warning(
+        "Preliminary information only—not legal advice. Claims are unverified; ownership, offences, deadlines, "
+        "and remedies depend on local law.",
+        icon=":material/gavel:",
+    )
+    doc_type = ST.selectbox("Document type", LegalCase.DOCUMENT_TYPES, key="legal_case_document_type")
+    if doc_type == "Contract":
+        ST.info("For contract wording and playbook comparison, select **Contract Review** in the sidebar.")
+        return
+    if config is None or config.name != providers.GEMINI:
+        ST.error("Legal Case Analysis uses Gemini. Set AEGIS_PROVIDER=gemini in .env, then restart.")
+        return
+    if not config.key_present:
+        ST.error("GEMINI_API_KEY is not set. Add it to the project .env file, then restart the app.")
+        return
+
+    ST.caption(
+        f"One Gemini request ({config.chat_model}) prepares a structured report from the extracted pages. "
+        "No contract playbook, embeddings, or contract-risk labels are used. Use synthetic or non-confidential text only."
+    )
+    upload = ST.file_uploader("Case document PDF", type=["pdf"], key="legal_case_pdf")
+    if upload is None:
+        ST.info("Choose a case PDF to extract it locally. Nothing is sent to Gemini until you consent and run analysis.")
+        return
+    file_bytes = upload.getvalue()
+    extracted = embed.read_contract_pdf(file_bytes, max_bytes=Utils.max_upload_bytes(), max_pages=Utils.max_pdf_pages())
+    if not extracted["ok"]:
+        ST.error(f"**{extracted['error']}** {ui.pdf_error_help(extracted['error'])}", icon=":material/error:")
+        return
+    pages = extracted.get("pages") or extracted["text"].split("\n")
+    ST.success(
+        f"Read {upload.name}: {extracted['page_count']} page(s), {sum(bool(page.strip()) for page in pages)} page(s) with text.",
+        icon=":material/task_alt:",
+    )
+    fingerprint = LegalCase.fingerprint(file_bytes, doc_type, config.chat_model)
+    saved = ST.session_state.get("legal_case_analysis")
+    if saved and saved.get("fingerprint") == fingerprint:
+        ST.info("This session already holds the report for this file and document type. No new Gemini request was made.")
+        render_case_report(saved["report"], saved["pages"], doc_type)
+        return
+
+    consent = ST.checkbox(
+        f"I consent to send the extracted pages of this {doc_type.lower()} to Gemini for one case-analysis request.",
+        key=f"case-consent-{fingerprint}",
+    )
+    running = ST.session_state.get("case_analysis_request") == fingerprint
+    ST.button(
+        "Analyze legal case",
+        type="primary",
+        disabled=not consent or running,
+        on_click=_start_case_analysis,
+        args=(fingerprint,),
+    )
+    if running:
+        try:
+            policy = Retry.CallPolicy(
+                provider=config.label,
+                max_retries=0,
+                budget=Retry.CallBudget(chat=1),
+            )
+            result = LegalCase.analyze_case(pages, doc_type, config=config, policy=policy)
+        except LegalCase.CaseReportError as exc:
+            ST.session_state.pop("case_analysis_request", None)
+            ST.error(str(exc), icon=":material/error:")
+            return
+        except Exception as exc:
+            ST.session_state.pop("case_analysis_request", None)
+            ST.error(failure_message(exc, config), icon=":material/error:")
+            return
+        ST.session_state["legal_case_analysis"] = {
+            "fingerprint": fingerprint,
+            "filename": upload.name,
+            "document_type": doc_type,
+            "pages": pages,
+            "report": result,
+            "finished": DT.datetime.now(DT.timezone.utc),
+        }
+        ST.session_state.pop("case_analysis_request", None)
+        ST.rerun()
+
+
+def _render_case_finding(item, text_key, extra=()):
+    ST.markdown(ui.plain_html(item.get(text_key) or LegalCase.UNKNOWN), unsafe_allow_html=True)
+    for key in extra:
+        value = item.get(key)
+        if value and value != LegalCase.UNKNOWN:
+            ST.markdown(f"**{ui.md_escape(key.replace('_', ' ').capitalize())}:**")
+            ST.markdown(ui.plain_html(value), unsafe_allow_html=True)
+    citations = item.get("citations") or []
+    if citations:
+        ST.caption("Source: " + LegalCase.citation_text(citations))
+    else:
+        ST.caption("No exact source quote was verified for this finding. Treat it as unverified and check the PDF.")
+
+
+def _case_table(items, columns):
+    if not items:
+        ST.info("Unknown from the supplied document.")
+        return
+    frame = PD.DataFrame(
+        [
+            {
+                label: (
+                    LegalCase.citation_text(item.get("citations")) or "No exact source quote verified"
+                    if key == "citations"
+                    else item.get(key) or LegalCase.UNKNOWN
+                )
+                for label, key in columns
+            }
+            for item in items
+        ]
+    )
+    ST.dataframe(frame, hide_index=True, width="stretch")
+
+
+def render_case_report(case, pages, doc_type):
+    """Render only case-analysis fields; deliberately no report/risk scoring calls."""
+    ST.subheader("Case report")
+    completeness = LegalCase.completeness(case)
+    cited_evidence = sum(bool(item.get("citations")) for item in case.get("evidence_available", []))
+    metrics = ST.columns(3)
+    metrics[0].metric("Case completeness", f"{completeness['cited']}/{completeness['total']} areas source-cited")
+    metrics[1].metric("Evidence entries with verified citations", cited_evidence)
+    metrics[2].metric("Missing-information items", len(case.get("missing_information", [])))
+    ST.caption(f"{completeness['status']}: counts areas with a source quote; it is not a legal merits score.")
+    ST.markdown("### Summary")
+    summary = case.get("case_summary") or {}
+    ST.markdown(ui.plain_html(summary.get("statement") or LegalCase.UNKNOWN), unsafe_allow_html=True)
+    if summary.get("citations"):
+        ST.caption("Source: " + LegalCase.citation_text(summary["citations"]))
+    else:
+        ST.caption("No exact source quote was verified for this summary; check the source pages.")
+
+    overview, timeline, evidence, missing, assessment = ST.tabs(
+        ["Overview", "Event timeline", "Evidence", "Missing information", "Assessment & next steps"]
+    )
+    with overview:
+        ST.markdown("#### Parties and stated positions")
+        for item in case.get("parties", []):
+            with ST.container(border=True):
+                _render_case_finding(item, "name", ("role", "stated_position"))
+        ST.markdown("#### Documented facts")
+        for item in case.get("documented_facts", []):
+            with ST.container(border=True):
+                _render_case_finding(item, "fact")
+        ST.markdown("#### Allegations not independently verified")
+        for item in case.get("allegations", []):
+            with ST.container(border=True):
+                _render_case_finding(item, "allegation", ("alleged_by",))
+        if doc_type in LegalCase.CASE_FIELDS:
+            ST.markdown(f"#### {doc_type}-specific details")
+            for field, detail in case.get("domain_details", {}).items():
+                with ST.container(border=True):
+                    ST.markdown(f"**{field.replace('_', ' ').capitalize()}**")
+                    ST.markdown(ui.plain_html(detail.get("statement") or LegalCase.UNKNOWN), unsafe_allow_html=True)
+                    if detail.get("citations"):
+                        ST.caption("Source: " + LegalCase.citation_text(detail["citations"]))
+                    else:
+                        ST.caption("No exact source quote was verified for this detail; treat it as unknown or unverified.")
+    with timeline:
+        ST.markdown("#### Timeline")
+        _case_table(case.get("chronology", []), (("Date stated", "date"), ("Event", "event"), ("Source", "citations")))
+    with evidence:
+        ST.markdown("#### Evidence in the document")
+        _case_table(
+            case.get("evidence_available", []),
+            (("Item", "item"), ("Status", "status"), ("Limitations", "limitation"), ("Source", "citations")),
+        )
+    with missing:
+        ST.markdown("#### Missing information")
+        ST.caption("Not mentioned here does not mean it does not exist elsewhere.")
+        if not case.get("missing_information"):
+            ST.info("Unknown from the supplied document.")
+        for index, item in enumerate(case.get("missing_information", [])):
+            ST.markdown(
+                f"- [ ] **{ui.md_escape(item.get('item') or LegalCase.UNKNOWN)}** — "
+                f"{ui.md_escape(item.get('why_it_matters') or 'Relevance is unknown.')} "
+                f"Verify: {ui.md_escape(item.get('how_to_verify') or 'Ask the relevant party or inspect the underlying record.')}"
+            )
+    with assessment:
+        ST.markdown("#### Issues requiring legal assessment")
+        for item in case.get("issues_for_legal_assessment", []):
+            with ST.container(border=True):
+                _render_case_finding(item, "issue", ("reason", "jurisdiction_note"))
+        if not case.get("issues_for_legal_assessment"):
+            ST.info("Unknown from the supplied document.")
+        ST.markdown("#### Questions for the opposing party or a lawyer")
+        for item in case.get("questions", []):
+            ST.markdown(
+                f"- **Ask {ui.md_escape(item.get('ask_of') or 'a lawyer')}:** "
+                f"{ui.md_escape(item.get('question') or LegalCase.UNKNOWN)}"
+            )
+        if not case.get("questions"):
+            ST.info("Unknown from the supplied document.")
+        ST.markdown("#### Next steps to consider")
+        for item in case.get("next_steps", []):
+            ST.markdown(
+                f"- {ui.md_escape(item.get('step') or LegalCase.UNKNOWN)} — "
+                f"{ui.md_escape(item.get('limitation') or 'Check applicable local law.')}"
+            )
+        if not case.get("next_steps"):
+            ST.info("Unknown from the supplied document.")
+        ST.warning(
+            "Potential steps depend on jurisdiction, limitation periods, procedure, and the complete record. "
+            "Confirm deadlines and options with a qualified lawyer in the relevant jurisdiction.",
+            icon=":material/info:",
+        )
+
+
 def main():
     ST.set_page_config(page_title="AEGIS LegalAI", page_icon=":material/gavel:", layout="wide")
+    with ST.sidebar:
+        dark_mode = ST.toggle("Dark mode", key="aegis_dark_mode", value=False)
+    if dark_mode:
+        ST.markdown(
+            """<style>
+            .stApp, [data-testid="stAppViewContainer"] { background:#111827; color:#E5E7EB; }
+            [data-testid="stSidebar"] { background:#0B1220; }
+            [data-testid="stHeader"] { background:rgba(17,24,39,.92); }
+            .stApp p, .stApp label, .stApp li, .stApp h1, .stApp h2, .stApp h3,
+            .stApp h4, .stApp [data-testid="stMarkdownContainer"] { color:#E5E7EB; }
+            .stApp [data-testid="stMetric"] { background:#1F2937; border:1px solid #374151;
+              border-radius:.5rem; padding:.7rem; }
+            .stApp [data-testid="stDataFrame"], .stApp [data-testid="stTable"] { filter:brightness(.88); }
+            .stApp input, .stApp textarea, .stApp [data-baseweb="select"] > div {
+              background:#1F2937; color:#F9FAFB; }
+            .aegis-page, .aegis-source-viewer pre { background:#1F2937 !important;
+              color:#E5E7EB !important; border-color:#4B5563 !important; }
+            .aegis-clause-id { color:#D1D5DB !important; }
+            .aegis-finding { background:#111827 !important; color:#E5E7EB !important; }
+            .aegis-quote { background:#1F2937 !important; color:#E5E7EB !important;
+              border-color:#4B5563 !important; }
+            </style>""",
+            unsafe_allow_html=True,
+        )
     try:
         config = providers.settings()
     except ValueError:
         config = None
     with ST.sidebar:
-        page = ST.radio("Page", ["Contract Review", "Customer Support Chat"], key="aegis_page")
+        page = ST.radio(
+            "Workflow",
+            ["Contract Review", "Legal Case Analysis", "Customer Support Chat"],
+            key="aegis_page",
+        )
     if page == "Customer Support Chat":
         render_support_chat(config)
+        return
+    if page == "Legal Case Analysis":
+        render_legal_case_analysis(config)
         return
     render_header(config)
     status = providers.index_status(config) if config is not None else None
